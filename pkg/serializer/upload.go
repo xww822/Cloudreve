@@ -18,6 +18,8 @@ type UploadPolicy struct {
 
 // UploadCredential 返回给客户端的上传凭证
 type UploadCredential struct {
+	SessionID string `json:"sessionID"`
+
 	Token     string `json:"token"`
 	Policy    string `json:"policy"`
 	Path      string `json:"path"` // 存储路径
@@ -36,6 +38,7 @@ type UploadSession struct {
 	Name        string
 	Size        uint64
 	SavePath    string
+	ChunkSize   uint64
 }
 
 // UploadCallback 上传回调正文

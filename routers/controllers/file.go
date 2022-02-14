@@ -1,19 +1,18 @@
 package controllers
 
-import "C"
 import (
 	"context"
 	"fmt"
+	"github.com/cloudreve/Cloudreve/v3/pkg/request"
 	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
 
-	model "github.com/cloudreve/Cloudreve/v3/models"
+	"github.com/cloudreve/Cloudreve/v3/pkg/conf"
 	"github.com/cloudreve/Cloudreve/v3/pkg/filesystem"
 	"github.com/cloudreve/Cloudreve/v3/pkg/filesystem/driver/local"
 	"github.com/cloudreve/Cloudreve/v3/pkg/filesystem/fsctx"
-	"github.com/cloudreve/Cloudreve/v3/pkg/request"
 	"github.com/cloudreve/Cloudreve/v3/pkg/serializer"
 	"github.com/cloudreve/Cloudreve/v3/service/explorer"
 	"github.com/gin-gonic/gin"
@@ -180,7 +179,7 @@ func Thumb(c *gin.Context) {
 	}
 
 	defer resp.Content.Close()
-	http.ServeContent(c.Writer, c.Request, "thumb.png", fs.FileTarget[0].UpdatedAt, resp.Content)
+	http.ServeContent(c.Writer, c.Request, "thumb."+conf.ThumbConfig.EncodeMethod, fs.FileTarget[0].UpdatedAt, resp.Content)
 
 }
 
@@ -300,16 +299,9 @@ func FileUploadStream(c *gin.Context) {
 		return
 	}
 
-	// 非可用策略时拒绝上传
-	if user, ok := c.Get("user"); ok && !user.(*model.User).Policy.IsTransitUpload(fileSize) {
-		request.BlackHole(c.Request.Body)
-		c.JSON(200, serializer.Err(serializer.CodePolicyNotAllowed, "当前存储策略无法使用", nil))
-		return
-	}
-
 	// 解码文件名和路径
-	fileName, err := url.QueryUnescape(c.Request.Header.Get("X-FileName"))
-	filePath, err := url.QueryUnescape(c.Request.Header.Get("X-Path"))
+	fileName, err := url.QueryUnescape(c.Request.Header.Get("X-Cr-FileName"))
+	filePath, err := url.QueryUnescape(c.Request.Header.Get("X-Cr-Path"))
 	if err != nil {
 		c.JSON(200, ErrorResponse(err))
 		return
@@ -327,6 +319,13 @@ func FileUploadStream(c *gin.Context) {
 	fs, err := filesystem.NewFileSystemFromContext(c)
 	if err != nil {
 		c.JSON(200, serializer.Err(serializer.CodePolicyNotAllowed, err.Error(), err))
+		return
+	}
+
+	// 非可用策略时拒绝上传
+	if !fs.Policy.IsTransitUpload(fileSize) {
+		request.BlackHole(c.Request.Body)
+		c.JSON(200, serializer.Err(serializer.CodePolicyNotAllowed, "当前存储策略无法使用", nil))
 		return
 	}
 
@@ -355,15 +354,15 @@ func FileUploadStream(c *gin.Context) {
 	})
 }
 
-// GetUploadCredential 获取上传凭证
+// GetUploadCredential 创建上传会话
 func GetUploadCredential(c *gin.Context) {
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var service explorer.UploadCredentialService
-	if err := c.ShouldBindQuery(&service); err == nil {
-		res := service.Get(ctx, c)
+	var service explorer.UploadSessionService
+	if err := c.ShouldBindJSON(&service); err == nil {
+		res := service.Create(ctx, c)
 		c.JSON(200, res)
 	} else {
 		c.JSON(200, ErrorResponse(err))

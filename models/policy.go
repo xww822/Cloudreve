@@ -37,6 +37,7 @@ type Policy struct {
 
 	// 数据库忽略字段
 	OptionsSerialized PolicyOption `gorm:"-"`
+	MasterID          string       `gorm:"-"`
 }
 
 // PolicyOption 非公有的存储策略属性
@@ -57,6 +58,8 @@ type PolicyOption struct {
 	Region string `json:"region,omitempty"`
 	// ServerSideEndpoint 服务端请求使用的 Endpoint，为空时使用 Policy.Server 字段
 	ServerSideEndpoint string `json:"server_side_endpoint,omitempty"`
+	// 分片上传的分片大小
+	ChunkSize uint64 `json:"chunk_size,omitempty"`
 }
 
 var thumbSuffix = map[string][]string{
@@ -273,6 +276,13 @@ func (policy *Policy) GetUploadURL() string {
 // SaveAndClearCache 更新并清理缓存
 func (policy *Policy) SaveAndClearCache() error {
 	err := DB.Save(policy).Error
+	policy.ClearCache()
+	return err
+}
+
+// SaveAndClearCache 更新并清理缓存
+func (policy *Policy) UpdateAccessKeyAndClearCache(s string) error {
+	err := DB.Model(policy).UpdateColumn("access_key", s).Error
 	policy.ClearCache()
 	return err
 }
